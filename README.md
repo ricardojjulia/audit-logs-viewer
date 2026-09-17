@@ -1,141 +1,251 @@
-# DISCLAIMER
-This project was created by myself, an SE of Dynatrace. This is not an official Dynatrace application and it is not something you can open a support ticket on. You may create an issue on the github repository, however there is no guaruntee it will be addressed (this isn't my primary job, just a fun project). Feel free to fork the repository for your own use as well.
+# Audit Logs Viewer
 
-# Prerequisites
+Audit Logs Viewer is an unofficial Dynatrace app for exploring audit events in a Dynatrace environment. It provides separate views for settings audit events, classic API audit events, and API gateway audit events, with built-in filtering, timeframe selection, and per-record detail views.
 
-Install the Dynatarce dt-app toolkit and then make sure it is added to your $PATH in environment variables:
-```
+> **Status:** Personal project by a Dynatrace employee, not an official Dynatrace-supported product. Please use GitHub issues for feedback, but support and updates are not guaranteed.
+
+## Product overview
+
+This app helps Dynatrace users answer questions such as:
+
+- What configuration changes were made in the environment?
+- Which API activity happened in a given time window?
+- Which user, token, client, app, or source was involved in an audit event?
+- What changed before and after a settings update?
+
+The UI is optimized for quick investigation:
+
+- dedicated pages for three audit-log sources
+- selectable relative timeframes from 30 minutes to 365 days
+- table filtering and multi-select filters
+- row selection with a side sheet for full event inspection
+- masked token display in tables
+- IAM-based user enrichment for full name and email when available
+
+## Supported audit-log sources
+
+The current implementation supports these sources from `dt.system.events`:
+
+| Source | Provider filter | Purpose |
+| --- | --- | --- |
+| Settings audit logs | `event.provider == "SETTINGS"` | configuration and settings changes |
+| Classic audit logs | `event.provider == "CLASSIC_API"` | classic API activity |
+| API gateway audit logs | `event.provider == "API_GATEWAY"` | platform/API gateway activity |
+
+All three views also filter on `event.kind == "AUDIT_EVENT"` and sort newest events first.
+
+## Architecture
+
+This repository contains a frontend-only Dynatrace App Toolkit project.
+
+| Area | Details |
+| --- | --- |
+| Runtime | Dynatrace App Toolkit (`dt-app`) |
+| UI stack | React 18 + TypeScript |
+| UI components | Dynatrace Strato components and icons |
+| Routing | `react-router-dom` with one route per audit source |
+| Data access | Dynatrace Query SDK polling async DQL execution |
+| User enrichment | Dynatrace IAM client fetches user names/emails for `user.id` UUIDs |
+| Detail inspection | JSON viewers and diff rendering for before/after settings payloads |
+
+Relevant files:
+
+- `ui/app/App.tsx` - route registration
+- `ui/app/pages/SettingsLogs.tsx`
+- `ui/app/pages/ClassicAuditLogs.tsx`
+- `ui/app/pages/GatewayLogs.tsx`
+- `ui/app/hooks/useSettingsAuditLogs.ts`
+- `ui/app/hooks/useClassicAuditLogs.ts`
+- `ui/app/hooks/useGatewayAuditLogs.ts`
+- `ui/app/hooks/useUserMap.ts`
+
+## Supported workflows
+
+### 1. Review settings changes
+
+Open **Settings Audit Logs** to inspect schema IDs, scope information, object summaries, and before/after value changes for settings events.
+
+### 2. Investigate classic API activity
+
+Open **Classic Audit Logs** to review classic API events by event type, resource, user organization, and authentication metadata.
+
+### 3. Investigate API gateway activity
+
+Open **API Gateway Audit Logs** to review app IDs, client IDs, grant types, origin metadata, and user context for platform/API gateway events.
+
+### 4. Drill into individual records
+
+Select rows and open the detail sheet to inspect:
+
+- audit metadata
+- authentication metadata
+- settings scope metadata when applicable
+- JSON patches
+- side-by-side previous/new values for changed settings content
+
+## Prerequisites
+
+- Node.js `>=16.13.0`
+- npm
+- Dynatrace App Toolkit (`dt-app`)
+- Access to a Dynatrace environment where you can deploy and run custom apps
+
+Install the toolkit if needed:
+
+```bash
 npx dt-app@latest
 ```
 
-Users looking to access the application will need the following scopes to be able to access all the pages of the application:
-```
-  storage:logs:read
-  storage:buckets:read
-  storage:system:read
-  environment-api:audit-logs:read
-  environment:roles:manage-settings
+## Installation
 
-  The user must also have:
-  app-engine:apps:run
-  app-engine:functions:run
+```bash
+git clone https://github.com/ricardojjulia/audit-logs-viewer.git
+cd audit-logs-viewer
+npm install
 ```
 
-```
-    "scopes": [
-      {
-        "name": "storage:logs:read",
-        "comment": "Access Logs"
-      },
-      {
-        "name": "storage:buckets:read",
-        "comment": "Access Buckets"
-      },
-      {
-        "name": "storage:system:read",
-        "comment": "Read System Tables for Audit Logs"
-      },
-      {
-        "name": "environment-api:audit-logs:read",
-        "comment": "Read old Audit Logs from API"
-      },
-      {
-        "name": "environment:roles:manage-settings",
-        "comment": "Manage Settings are required to view old audit logs"
-      }
-    ]
-```
+## Configuration
 
-# Getting Started with your Dynatrace App
+Update `app.config.json` before running or deploying:
 
-Git clone the repository.
+1. Set `environmentUrl` to your Dynatrace Apps environment URL.
+2. Review the application metadata and requested scopes.
 
-## Update the configuration file
-Go to the file app.config.json and update the environmentURL to your environment.
+Current configured app scopes:
 
-```
-{
-  "environmentUrl": "ENTER YOUR TENANT URL HERE https://abc123.apps.dynatrace.com",
-  "app": {
-    "name": "Audit Logs Viewer",
-    "version": "0.0.4",
-    "description": "An application to view and quickly filter audit logs.",
-    "id": "my.audit.logs.viewer",
-    "scopes": [
-      {
-        "name": "storage:logs:read",
-        "comment": "Access Logs"
-      },
-      {
-        "name": "storage:buckets:read",
-        "comment": "Access Buckets"
-      },
-      {
-        "name": "storage:system:read",
-        "comment": "Read System Tables for Audit Logs"
-      },
-      {
-        "name": "environment-api:audit-logs:read",
-        "comment": "Read old Audit Logs from API"
-      }
-    ]
-  },
-  "icon": "./src/assets/auditLogsIcon.png"
-}
+- `storage:logs:read`
+- `storage:buckets:read`
+- `storage:system:read`
+- `environment-api:audit-logs:read`
+- `iam:users:read`
 
+These scopes are used to read audit events from platform storage and enrich records with IAM user information.
 
+## Usage
+
+### Start local development
+
+```bash
+npm run start
 ```
 
-## Install the dependencies
-```npm install```
+This runs `dt-app dev`.
 
-## Start the app in development mode
-```npm run start```
-## Make Changes
+### Build the app
 
-## Deploy to your tenant:
-```npm run deploy```
+```bash
+npm run build
+```
 
-## Available Scripts
+### Deploy to your Dynatrace environment
 
-In the project directory, you can run:
+```bash
+npm run deploy
+```
 
-### `npm run start` or `yarn start`
+### Remove the deployed app
 
-Runs the app in the development mode. A new browser window with your running app will be automatically opened.
+```bash
+npm run uninstall
+```
 
-Edit a component file in `src` and save it. The page will reload when you make changes. You may also see any errors in the console.
+## How-to examples
 
-### `npm run build` or `yarn build`
+### View the last 24 hours of settings changes
 
-Builds the app for production to the `dist` folder. It correctly bundles your app in production mode and optimizes the build for the best performance.
+1. Start the app.
+2. Open **Settings Audit Logs**.
+3. Keep the default 24-hour timeframe or choose another preset.
+4. Filter by schema ID, scope type, user organization, or event type.
+5. Select one or more rows and open the detail sheet for JSON patch and diff inspection.
 
-### `npm run deploy` or `yarn deploy`
+### Find API gateway events for a specific app
 
-Builds the app and deploys it to the specified environment in `app.config.json`.
+1. Open **API Gateway Audit Logs**.
+2. Use the timeframe selector.
+3. Filter by **App Id** or event type.
+4. Review the selected row details for client ID, grant type, origin session, and user context.
 
-### `npm run uninstall` or `yarn uninstall`
+### Inspect classic API activity for a resource
 
-Uninstalls the app from the specified environment in `app.config.json`.
+1. Open **Classic Audit Logs**.
+2. Filter by **Resource** or **User Organization**.
+3. Use the table action menu to copy values from relevant cells.
 
-### `npm run generate:function` or `yarn generate:function`
+## Development, test, and build commands
 
-Generates a new serverless function for your app in the `api` folder.
+| Command | Purpose |
+| --- | --- |
+| `npm run start` | run local development mode with `dt-app dev` |
+| `npm run build` | build the app for production |
+| `npm run deploy` | build and deploy to the configured environment |
+| `npm run uninstall` | uninstall the app from the configured environment |
+| `npm run lint` | run ESLint |
+| `npm run test` | run Jest tests for the query hooks |
+| `npm run update` | update Dynatrace packages with toolkit migrations |
+| `npm run info` | print App Toolkit environment info |
+| `npm run help` | show toolkit help |
+| `npm run generate:function` | scaffold a function |
+| `npm run generate:action` | scaffold an action |
 
-### `npm run update` or `yarn update`
+## Security and privacy considerations
 
-Updates @dynatrace-scoped packages to the latest version and applies automatic migrations.
+- Audit logs can contain sensitive operational and identity metadata.
+- The UI masks long authentication tokens in table cells, but detailed record views may still expose sensitive fields present in the source event.
+- The app requests `iam:users:read` to enrich user UUIDs with names and email addresses.
+- Do not point this app at environments unless the operators are authorized to view audit and IAM data.
+- Do not commit real tenant URLs, tokens, customer data, or exported audit events to the repository.
+- Review `CHECK_IN_POLICY.md` before contributing changes.
 
-### `npm run info` or `yarn info`
+## Troubleshooting
 
-Outputs the CLI and environment information.
+### No data is shown
 
-### `npm run help` or `yarn run help`
+- Confirm the app is deployed to the intended environment.
+- Verify the configured `environmentUrl`.
+- Check that the signed-in user and app installation have the required scopes.
+- Confirm that the selected timeframe actually contains audit events for the chosen source.
 
-Outputs help for the Dynatrace App Toolkit.
+### User names or emails are missing
 
-## Learn more
+- `user.id` enrichment only works when the value is a UUID and the IAM lookup succeeds.
+- If `iam:users:read` is unavailable, the app can still show the raw `user.id` where present.
 
-You can find more information on how to use all the features of the new Dynatrace Platform in [Dynatrace Developer](https://dt-url.net/developers).
+### Build or start fails
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+- Verify the Node.js version satisfies `>=16.13.0`.
+- Run `npm install` again if dependencies are missing.
+- Use `npm run info` to inspect the local App Toolkit setup.
+
+## Contributing
+
+Contributions are welcome, but please keep changes focused and reviewable.
+
+1. Open an issue describing the problem or enhancement.
+2. Make minimal, well-scoped changes.
+3. Run the existing checks before submitting a pull request:
+
+```bash
+npm run lint
+npm run test
+npm run build
+```
+
+4. Avoid committing secrets, tenant-specific configuration, or captured customer data.
+
+## Changelog, releases, and update guidance
+
+This repository does not currently include a formal `CHANGELOG.md` or published Git tags.
+
+Recommended maintenance practice:
+
+- document user-visible changes in pull requests
+- tag releases when publishing meaningful updates
+- add a changelog once release cadence becomes regular
+- run `npm run update` before dependency refreshes to apply supported Dynatrace toolkit migrations
+
+## Licensing status
+
+This repository now includes an ISC license file that matches the existing `license: "ISC"` declaration in `package.json`.
+
+See `LICENSE`.
